@@ -1,0 +1,122 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import List, Optional
+
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QVBoxLayout,
+)
+
+from core.models import LotConfig
+
+
+class LotEditorDialog(QDialog):
+    def __init__(self, lot: Optional[LotConfig] = None, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Éditer un lot")
+        self.resize(500, 400)
+
+        self._name_edit = QLineEdit()
+        self._path_edit = QLineEdit()
+        self._pattern_edit = QLineEdit("*.db")
+        self._files_list = QListWidget()
+        self._files_list.setSelectionMode(QAbstractItemView.SingleSelection)
+
+        form = QFormLayout()
+        form.addRow("Nom", self._name_edit)
+
+        path_layout = QHBoxLayout()
+        path_layout.addWidget(self._path_edit)
+        browse_btn = QPushButton("Choisir")
+        browse_btn.clicked.connect(self._choose_directory)
+        path_layout.addWidget(browse_btn)
+        form.addRow("Dossier", path_layout)
+
+        form.addRow("Pattern", self._pattern_edit)
+
+        files_group = QGroupBox("Fichiers sélectionnés (optionnel)")
+        files_layout = QVBoxLayout(files_group)
+        files_layout.addWidget(QLabel("Lorsque la liste est vide, le pattern est utilisé."))
+        files_layout.addWidget(self._files_list)
+        btn_bar = QHBoxLayout()
+        add_files_btn = QPushButton("Ajouter fichiers")
+        remove_btn = QPushButton("Supprimer")
+        clear_btn = QPushButton("Vider")
+        add_files_btn.clicked.connect(self._add_files)
+        remove_btn.clicked.connect(self._remove_file)
+        clear_btn.clicked.connect(self._clear_files)
+        for btn in (add_files_btn, remove_btn, clear_btn):
+            btn_bar.addWidget(btn)
+        btn_bar.addStretch()
+        files_layout.addLayout(btn_bar)
+
+        layout = QVBoxLayout(self)
+        layout.addLayout(form)
+        layout.addWidget(files_group)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        if lot:
+            self._name_edit.setText(lot.name)
+            self._path_edit.setText(lot.databases_path)
+            self._pattern_edit.setText(lot.pattern)
+            for file in lot.files:
+                QListWidgetItem(file, self._files_list)
+
+    def _choose_directory(self) -> None:
+        directory = QFileDialog.getExistingDirectory(self, "Sélectionner un dossier", self._path_edit.text() or str(Path.home()))
+        if directory:
+            self._path_edit.setText(directory)
+
+    def _add_files(self) -> None:
+        directory = self._path_edit.text() or str(Path.home())
+        files, _ = QFileDialog.getOpenFileNames(self, "Sélectionner des bases SQLite", directory, "SQLite (*.db *.sqlite);;Tous (*.*)")
+        for file_path in files:
+            if not self._contains_file(file_path):
+                QListWidgetItem(file_path, self._files_list)
+
+    def _remove_file(self) -> None:
+        row = self._files_list.currentRow()
+        if row >= 0:
+            item = self._files_list.takeItem(row)
+            del item
+
+    def _clear_files(self) -> None:
+        self._files_list.clear()
+
+    def _contains_file(self, file_path: str) -> bool:
+        return any(self._files_list.item(i).text() == file_path for i in range(self._files_list.count()))
+
+    def _on_accept(self) -> None:
+        if not self._name_edit.text().strip():
+            self._name_edit.setFocus()
+            return
+        if not self._path_edit.text().strip():
+            self._path_edit.setFocus()
+            return
+        self.accept()
+
+    def get_lot(self) -> LotConfig:
+        files = [self._files_list.item(i).text() for i in range(self._files_list.count())]
+        return LotConfig(
+            name=self._name_edit.text().strip(),
+            databases_path=self._path_edit.text().strip(),
+            pattern=self._pattern_edit.text().strip() or "*.db",
+            files=files,
+        )
