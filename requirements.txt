@@ -1,0 +1,3 @@
+# Core GUI and YAML dependencies for the CLI Orchestrator
+PySide6>=6.6
+PyYAML>=6.0
