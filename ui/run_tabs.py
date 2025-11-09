@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import Dict
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QElapsedTimer, QTimer, Qt, Signal
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
+    QHBoxLayout,
     QLabel,
     QPushButton,
     QTabWidget,
@@ -21,16 +22,29 @@ class RunTab(QWidget):
         super().__init__(parent)
         self.task = task
         self.command = command
-        self.status_label = QLabel("En attente")
+        self.status_label = QLabel()
+        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setMargin(6)
+        self.timer_label = QLabel("Temps écoulé : 00:00")
         self.log_view = QTextEdit()
         self.log_view.setReadOnly(True)
         self.stop_button = QPushButton("Arrêter ce process")
+        self._elapsed_timer = QElapsedTimer()
+        self._tick_timer = QTimer(self)
+        self._tick_timer.setInterval(1000)
+        self._tick_timer.timeout.connect(self._update_elapsed_time)
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(f"Commande : {command}"))
-        layout.addWidget(self.status_label)
+        status_layout = QHBoxLayout()
+        status_layout.addWidget(QLabel("Statut :"))
+        status_layout.addWidget(self.status_label)
+        status_layout.addStretch()
+        status_layout.addWidget(self.timer_label)
+        layout.addLayout(status_layout)
         layout.addWidget(self.log_view)
         layout.addWidget(self.stop_button)
+        self.set_status(ExecutionStatus.PENDING)
 
     def append_text(self, text: str, is_error: bool = False) -> None:
         if is_error:
@@ -43,14 +57,52 @@ class RunTab(QWidget):
         self.log_view.setTextCursor(cursor)
 
     def set_status(self, status: ExecutionStatus) -> None:
-        mapping = {
-            ExecutionStatus.RUNNING: "En cours",
+        text_mapping = {
+            ExecutionStatus.PENDING: "A Traiter",
+            ExecutionStatus.RUNNING: "En cours de traitement",
             ExecutionStatus.SUCCEEDED: "Terminé",
-            ExecutionStatus.FAILED: "Échec",
-            ExecutionStatus.STOPPED: "Arrêté",
-            ExecutionStatus.PENDING: "En attente",
+            ExecutionStatus.FAILED: "Interrompu",
+            ExecutionStatus.STOPPED: "Interrompu",
         }
-        self.status_label.setText(mapping.get(status, status.name))
+        style_mapping = {
+            ExecutionStatus.PENDING: "background-color: #E0ECFF; color: #0A4F8B; border-radius: 10px;",
+            ExecutionStatus.RUNNING: "background-color: #FFF4CC; color: #8A6D3B; border-radius: 10px;",
+            ExecutionStatus.SUCCEEDED: "background-color: #DFF2BF; color: #3C763D; border-radius: 10px;",
+            ExecutionStatus.FAILED: "background-color: #F2DEDE; color: #A94442; border-radius: 10px;",
+            ExecutionStatus.STOPPED: "background-color: #F2DEDE; color: #A94442; border-radius: 10px;",
+        }
+        self.status_label.setText(text_mapping.get(status, status.name))
+        style = style_mapping.get(status)
+        if style:
+            self.status_label.setStyleSheet(style)
+        if status == ExecutionStatus.RUNNING and not self._tick_timer.isActive():
+            self._start_elapsed_timer()
+        elif status in (ExecutionStatus.SUCCEEDED, ExecutionStatus.FAILED, ExecutionStatus.STOPPED):
+            self._stop_elapsed_timer()
+
+    def _start_elapsed_timer(self) -> None:
+        self._elapsed_timer.start()
+        self._update_elapsed_time()
+        self._tick_timer.start()
+
+    def _stop_elapsed_timer(self) -> None:
+        if self._tick_timer.isActive():
+            self._tick_timer.stop()
+        if self._elapsed_timer.isValid():
+            self._update_elapsed_time()
+
+    def _update_elapsed_time(self) -> None:
+        if not self._elapsed_timer.isValid():
+            return
+        elapsed_ms = self._elapsed_timer.elapsed()
+        hours = elapsed_ms // 3_600_000
+        minutes = (elapsed_ms // 60_000) % 60
+        seconds = (elapsed_ms // 1_000) % 60
+        if hours:
+            formatted = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        else:
+            formatted = f"{minutes:02d}:{seconds:02d}"
+        self.timer_label.setText(f"Temps écoulé : {formatted}")
 
 
 class RunTabsWidget(QTabWidget):
