@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Dict
 
-from PySide6.QtCore import QElapsedTimer, QTimer, Qt, Signal
+from PySide6.QtCore import QElapsedTimer, QTimer, Qt, Signal, QSize
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
+    QStyle,
 )
 
 from core.models import DatabaseTask, ExecutionStatus
@@ -28,14 +29,21 @@ class RunTab(QWidget):
         self.timer_label = QLabel("Temps écoulé : 00:00")
         self.log_view = QTextEdit()
         self.log_view.setReadOnly(True)
+        self.log_view.setPlaceholderText("Les messages du process apparaîtront ici...")
         self.stop_button = QPushButton("Arrêter ce process")
+        self.stop_button.setIcon(self.style().standardIcon(QStyle.SP_MediaStop))
+        self.stop_button.setIconSize(QSize(20, 20))
+        self.stop_button.setToolTip("Forcer l'arrêt de ce process en cours")
         self._elapsed_timer = QElapsedTimer()
         self._tick_timer = QTimer(self)
         self._tick_timer.setInterval(1000)
         self._tick_timer.timeout.connect(self._update_elapsed_time)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel(f"Commande : {command}"))
+        command_label = QLabel(f"Commande : {command}")
+        command_label.setWordWrap(True)
+        command_label.setStyleSheet("font-family: monospace; color: #333;")
+        layout.addWidget(command_label)
         status_layout = QHBoxLayout()
         status_layout.addWidget(QLabel("Statut :"))
         status_layout.addWidget(self.status_label)
@@ -43,7 +51,10 @@ class RunTab(QWidget):
         status_layout.addWidget(self.timer_label)
         layout.addLayout(status_layout)
         layout.addWidget(self.log_view)
-        layout.addWidget(self.stop_button)
+        controls_layout = QHBoxLayout()
+        controls_layout.addStretch()
+        controls_layout.addWidget(self.stop_button)
+        layout.addLayout(controls_layout)
         self.set_status(ExecutionStatus.PENDING)
 
     def append_text(self, text: str, is_error: bool = False) -> None:
@@ -75,6 +86,7 @@ class RunTab(QWidget):
         style = style_mapping.get(status)
         if style:
             self.status_label.setStyleSheet(style)
+        self.stop_button.setEnabled(status == ExecutionStatus.RUNNING)
         if status == ExecutionStatus.RUNNING and not self._tick_timer.isActive():
             self._start_elapsed_timer()
         elif status in (ExecutionStatus.SUCCEEDED, ExecutionStatus.FAILED, ExecutionStatus.STOPPED):
@@ -111,13 +123,15 @@ class RunTabsWidget(QTabWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._tabs: Dict[str, RunTab] = {}
+        self.setDocumentMode(True)
+        self.setMovable(True)
 
     def start_task(self, task: DatabaseTask, command: str) -> None:
         tab = RunTab(task, command)
         tab.set_status(ExecutionStatus.RUNNING)
         tab.stop_button.clicked.connect(lambda: self.stop_requested.emit(task))
         self._tabs[task.id()] = tab
-        self.addTab(tab, task.display_name())
+        self.addTab(tab, self._icon_for_status(ExecutionStatus.RUNNING), task.display_name())
         self.setCurrentWidget(tab)
 
     def append_output(self, task: DatabaseTask, text: str, is_error: bool) -> None:
@@ -129,7 +143,21 @@ class RunTabsWidget(QTabWidget):
         tab = self._tabs.get(task.id())
         if tab:
             tab.set_status(status)
+            index = self.indexOf(tab)
+            if index != -1:
+                self.setTabIcon(index, self._icon_for_status(status))
 
     def clear_tasks(self) -> None:
         self._tabs.clear()
         self.clear()
+
+    def _icon_for_status(self, status: ExecutionStatus):
+        mapping = {
+            ExecutionStatus.PENDING: QStyle.SP_BrowserReload,
+            ExecutionStatus.RUNNING: QStyle.SP_MediaPlay,
+            ExecutionStatus.SUCCEEDED: QStyle.SP_DialogApplyButton,
+            ExecutionStatus.FAILED: QStyle.SP_MessageBoxCritical,
+            ExecutionStatus.STOPPED: QStyle.SP_MessageBoxWarning,
+        }
+        icon_type = mapping.get(status, QStyle.SP_FileDialogInfoView)
+        return self.style().standardIcon(icon_type)

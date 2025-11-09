@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QVBoxLayout,
+    QStyle,
 )
 
 from core.models import LotConfig
@@ -30,10 +31,17 @@ class LotEditorDialog(QDialog):
         self.resize(500, 400)
 
         self._name_edit = QLineEdit()
+        self._name_edit.setPlaceholderText("Nom du lot (ex: Import clients)")
+        self._name_edit.setClearButtonEnabled(True)
         self._path_edit = QLineEdit()
+        self._path_edit.setPlaceholderText("Dossier contenant les bases")
+        self._path_edit.setClearButtonEnabled(True)
         self._pattern_edit = QLineEdit("*.db")
+        self._pattern_edit.setPlaceholderText("Pattern de fichiers (ex: *.db)")
+        self._pattern_edit.setClearButtonEnabled(True)
         self._files_list = QListWidget()
         self._files_list.setSelectionMode(QAbstractItemView.SingleSelection)
+        self._files_list.setAlternatingRowColors(True)
 
         form = QFormLayout()
         form.addRow("Nom", self._name_edit)
@@ -41,6 +49,8 @@ class LotEditorDialog(QDialog):
         path_layout = QHBoxLayout()
         path_layout.addWidget(self._path_edit)
         browse_btn = QPushButton("Choisir")
+        browse_btn.setIcon(self.style().standardIcon(QStyle.SP_DirOpenIcon))
+        browse_btn.setToolTip("Sélectionner le dossier contenant les bases")
         browse_btn.clicked.connect(self._choose_directory)
         path_layout.addWidget(browse_btn)
         form.addRow("Dossier", path_layout)
@@ -53,8 +63,14 @@ class LotEditorDialog(QDialog):
         files_layout.addWidget(self._files_list)
         btn_bar = QHBoxLayout()
         add_files_btn = QPushButton("Ajouter fichiers")
+        add_files_btn.setIcon(self.style().standardIcon(QStyle.SP_FileDialogNewFolder))
+        add_files_btn.setToolTip("Ajouter des fichiers spécifiques pour ce lot")
         remove_btn = QPushButton("Supprimer")
+        remove_btn.setIcon(self.style().standardIcon(QStyle.SP_TrashIcon))
+        remove_btn.setToolTip("Retirer le fichier sélectionné de la liste")
         clear_btn = QPushButton("Vider")
+        clear_btn.setIcon(self.style().standardIcon(QStyle.SP_LineEditClearButton))
+        clear_btn.setToolTip("Supprimer tous les fichiers sélectionnés")
         add_files_btn.clicked.connect(self._add_files)
         remove_btn.clicked.connect(self._remove_file)
         clear_btn.clicked.connect(self._clear_files)

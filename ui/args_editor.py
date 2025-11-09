@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
+    QStyle,
 )
 
 
@@ -30,9 +31,13 @@ class ArgsEditorDialog(QDialog):
         self._jvm_table.verticalHeader().setVisible(False)
         self._jvm_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self._jvm_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self._jvm_table.setAlternatingRowColors(True)
+        self._jvm_table.setMinimumHeight(150)
 
         self._app_list = QListWidget()
         self._app_list.setSelectionMode(QAbstractItemView.SingleSelection)
+        self._app_list.setAlternatingRowColors(True)
+        self._app_list.setMinimumHeight(150)
 
         layout = QVBoxLayout(self)
         layout.addWidget(self._build_jvm_group())
@@ -52,7 +57,11 @@ class ArgsEditorDialog(QDialog):
         layout.addWidget(self._jvm_table)
         button_bar = QHBoxLayout()
         add_btn = QPushButton("Ajouter")
+        add_btn.setIcon(self.style().standardIcon(QStyle.SP_FileDialogNewFolder))
+        add_btn.setToolTip("Ajouter une propriété JVM (-Dclé=valeur)")
         remove_btn = QPushButton("Supprimer")
+        remove_btn.setIcon(self.style().standardIcon(QStyle.SP_TrashIcon))
+        remove_btn.setToolTip("Supprimer la propriété sélectionnée")
         add_btn.clicked.connect(self._add_jvm_row)
         remove_btn.clicked.connect(self._remove_jvm_row)
         button_bar.addWidget(add_btn)
@@ -68,10 +77,20 @@ class ArgsEditorDialog(QDialog):
         layout.addWidget(self._app_list)
         button_bar = QHBoxLayout()
         add_btn = QPushButton("Ajouter")
+        add_btn.setIcon(self.style().standardIcon(QStyle.SP_FileDialogNewFolder))
+        add_btn.setToolTip("Ajouter un nouvel argument applicatif")
         edit_btn = QPushButton("Éditer")
+        edit_btn.setIcon(self.style().standardIcon(QStyle.SP_FileDialogContentsView))
+        edit_btn.setToolTip("Modifier l'argument sélectionné")
         remove_btn = QPushButton("Supprimer")
+        remove_btn.setIcon(self.style().standardIcon(QStyle.SP_TrashIcon))
+        remove_btn.setToolTip("Supprimer l'argument sélectionné")
         up_btn = QPushButton("Monter")
+        up_btn.setIcon(self.style().standardIcon(QStyle.SP_ArrowUp))
+        up_btn.setToolTip("Monter l'argument dans la liste")
         down_btn = QPushButton("Descendre")
+        down_btn.setIcon(self.style().standardIcon(QStyle.SP_ArrowDown))
+        down_btn.setToolTip("Descendre l'argument dans la liste")
         add_btn.clicked.connect(self._add_app_argument)
         edit_btn.clicked.connect(self._edit_app_argument)
         remove_btn.clicked.connect(self._remove_app_argument)

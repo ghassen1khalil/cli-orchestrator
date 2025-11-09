@@ -3,21 +3,25 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSize
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QFileDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSplitter,
+    QStyle,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
+from PySide6.QtWidgets import QHeaderView
 
 from core.models import AppSettings, CommandArguments, ExecutionStatus, LotConfig
 from core.orchestrator import Orchestrator
@@ -62,85 +66,194 @@ class MainWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         root_layout = QVBoxLayout(central)
+        root_layout.setContentsMargins(16, 16, 16, 16)
+        root_layout.setSpacing(18)
+
+        header_frame = QFrame()
+        header_frame.setObjectName("headerFrame")
+        header_frame.setFrameShape(QFrame.StyledPanel)
+        header_layout = QVBoxLayout(header_frame)
+        header_layout.setContentsMargins(12, 12, 12, 12)
+        header_layout.setSpacing(8)
+
+        title_label = QLabel("Configurez votre orchestration en quelques clics")
+        title_label.setObjectName("titleLabel")
+        title_label.setStyleSheet("font-size: 18px; font-weight: 600;")
+        header_layout.addWidget(title_label)
 
         self._jar_label = QLabel(self._format_jar_label())
+        self._jar_label.setWordWrap(True)
+        header_layout.addWidget(self._jar_label)
+
+        buttons_layout = QHBoxLayout()
+        buttons_layout.setSpacing(10)
+
         choose_jar_btn = QPushButton("Choisir .jar")
+        choose_jar_btn.setIcon(self.style().standardIcon(QStyle.SP_DialogOpenButton))
+        choose_jar_btn.setToolTip("Sélectionner le fichier jar à exécuter")
         choose_jar_btn.clicked.connect(self._choose_jar)
+        buttons_layout.addWidget(choose_jar_btn)
 
         args_button = QPushButton("Arguments JVM & App")
+        args_button.setIcon(self.style().standardIcon(QStyle.SP_FileDialogDetailedView))
+        args_button.setToolTip("Modifier les paramètres JVM et les arguments de l'application")
         args_button.clicked.connect(self._edit_arguments)
+        buttons_layout.addWidget(args_button)
 
         load_yaml_btn = QPushButton("Charger YAML")
+        load_yaml_btn.setIcon(self.style().standardIcon(QStyle.SP_DialogOpenButton))
+        load_yaml_btn.setToolTip("Importer une configuration enregistrée")
         load_yaml_btn.clicked.connect(self._load_yaml)
+        buttons_layout.addWidget(load_yaml_btn)
+
         save_yaml_btn = QPushButton("Enregistrer YAML")
+        save_yaml_btn.setIcon(self.style().standardIcon(QStyle.SP_DialogSaveButton))
+        save_yaml_btn.setToolTip("Sauvegarder la configuration actuelle")
         save_yaml_btn.clicked.connect(self._save_yaml)
+        buttons_layout.addWidget(save_yaml_btn)
 
         self._mode_button = QPushButton()
         self._mode_button.setCheckable(True)
+        self._mode_button.setIcon(self.style().standardIcon(QStyle.SP_BrowserReload))
+        self._mode_button.setToolTip("Basculer entre l'exécution automatique et manuelle des lots")
         self._mode_button.clicked.connect(self._toggle_mode)
+        buttons_layout.addWidget(self._mode_button)
 
-        self._start_button = QPushButton("Démarrer orchestration")
+        buttons_layout.addStretch()
+
+        self._start_button = QPushButton("Démarrer")
+        self._start_button.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
+        self._start_button.setIconSize(QSize(28, 28))
+        self._start_button.setToolTip("Lancer l'orchestration avec les paramètres actuels")
         self._start_button.clicked.connect(self._start_execution)
-        self._stop_button = QPushButton("Arrêter tout")
+        buttons_layout.addWidget(self._start_button)
+
+        self._stop_button = QPushButton("Arrêter")
+        self._stop_button.setIcon(self.style().standardIcon(QStyle.SP_MediaStop))
+        self._stop_button.setIconSize(QSize(28, 28))
+        self._stop_button.setToolTip("Arrêter tous les traitements en cours")
         self._stop_button.clicked.connect(self._stop_execution)
         self._stop_button.setEnabled(False)
+        buttons_layout.addWidget(self._stop_button)
 
-        top_layout = QHBoxLayout()
-        top_layout.addWidget(self._jar_label, stretch=1)
-        top_layout.addWidget(choose_jar_btn)
-        top_layout.addWidget(args_button)
-        top_layout.addWidget(load_yaml_btn)
-        top_layout.addWidget(save_yaml_btn)
-        top_layout.addWidget(self._mode_button)
-        top_layout.addWidget(self._start_button)
-        top_layout.addWidget(self._stop_button)
-        root_layout.addLayout(top_layout)
+        header_layout.addLayout(buttons_layout)
+        root_layout.addWidget(header_frame)
 
         self._lots_table = QTableWidget(0, 4)
-        self._lots_table.setHorizontalHeaderLabels(["Nom", "Dossier", "Pattern", "Fichiers"])
-        self._lots_table.horizontalHeader().setStretchLastSection(True)
+        self._lots_table.setHorizontalHeaderLabels(["Nom", "Dossier", "Pattern", "Fichiers détectés"])
+        self._lots_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self._lots_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self._lots_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self._lots_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
         self._lots_table.verticalHeader().setVisible(False)
         self._lots_table.setSelectionBehavior(QTableWidget.SelectRows)
         self._lots_table.setSelectionMode(QTableWidget.SingleSelection)
+        self._lots_table.setAlternatingRowColors(True)
+        self._lots_table.setWordWrap(True)
+        self._lots_table.setToolTip("Liste des lots à exécuter. Sélectionnez-en un pour le modifier ou réorganiser l'ordre.")
 
         lot_buttons_layout = QHBoxLayout()
+        lot_buttons_layout.setSpacing(6)
+
         add_lot_btn = QPushButton("Ajouter")
-        edit_lot_btn = QPushButton("Éditer")
-        remove_lot_btn = QPushButton("Supprimer")
-        up_btn = QPushButton("Monter")
-        down_btn = QPushButton("Descendre")
+        add_lot_btn.setIcon(self.style().standardIcon(QStyle.SP_FileDialogNewFolder))
+        add_lot_btn.setToolTip("Créer un nouveau lot")
         add_lot_btn.clicked.connect(self._add_lot)
+
+        edit_lot_btn = QPushButton("Éditer")
+        edit_lot_btn.setIcon(self.style().standardIcon(QStyle.SP_FileDialogContentsView))
+        edit_lot_btn.setToolTip("Modifier le lot sélectionné")
         edit_lot_btn.clicked.connect(self._edit_lot)
+
+        remove_lot_btn = QPushButton("Supprimer")
+        remove_lot_btn.setIcon(self.style().standardIcon(QStyle.SP_DialogDiscardButton))
+        remove_lot_btn.setToolTip("Retirer le lot sélectionné")
         remove_lot_btn.clicked.connect(self._remove_lot)
+
+        up_btn = QPushButton("Monter")
+        up_btn.setIcon(self.style().standardIcon(QStyle.SP_ArrowUp))
+        up_btn.setToolTip("Monter le lot dans la liste")
         up_btn.clicked.connect(lambda: self._move_lot(-1))
+
+        down_btn = QPushButton("Descendre")
+        down_btn.setIcon(self.style().standardIcon(QStyle.SP_ArrowDown))
+        down_btn.setToolTip("Descendre le lot dans la liste")
         down_btn.clicked.connect(lambda: self._move_lot(1))
+
         for btn in (add_lot_btn, edit_lot_btn, remove_lot_btn, up_btn, down_btn):
             lot_buttons_layout.addWidget(btn)
         lot_buttons_layout.addStretch()
 
-        root_layout.addWidget(self._lots_table)
-        root_layout.addLayout(lot_buttons_layout)
+        lots_container = QFrame()
+        lots_container.setFrameShape(QFrame.StyledPanel)
+        lots_layout = QVBoxLayout(lots_container)
+        lots_layout.setContentsMargins(12, 12, 12, 12)
+        lots_layout.setSpacing(8)
 
-        self._status_label = QLabel("Prêt")
-        root_layout.addWidget(self._status_label)
+        self._lots_hint_label = QLabel("Ajoutez des lots pour définir vos traitements.")
+        self._lots_hint_label.setStyleSheet("color: #555; font-style: italic;")
+        lots_layout.addWidget(self._lots_hint_label)
+        lots_layout.addWidget(self._lots_table)
+        lots_layout.addLayout(lot_buttons_layout)
+
+        splitter = QSplitter(Qt.Vertical)
+        splitter.addWidget(lots_container)
 
         self._run_tabs = RunTabsWidget()
         self._run_tabs.stop_requested.connect(self._stop_single_task)
-        root_layout.addWidget(self._run_tabs, stretch=1)
+        splitter.addWidget(self._run_tabs)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 2)
+
+        root_layout.addWidget(splitter, stretch=1)
+
+        status_frame = QFrame()
+        status_layout = QHBoxLayout(status_frame)
+        status_layout.setContentsMargins(12, 8, 12, 8)
+        status_layout.setSpacing(10)
+        status_frame.setFrameShape(QFrame.StyledPanel)
+
+        self._status_icon = QLabel()
+        status_layout.addWidget(self._status_icon)
+
+        self._status_label = QLabel()
+        self._status_label.setObjectName("statusLabel")
+        self._status_label.setStyleSheet("font-weight: 500;")
+        status_layout.addWidget(self._status_label)
+        status_layout.addStretch()
+
+        root_layout.addWidget(status_frame)
+
+        self._update_status("Prêt", QStyle.SP_MessageBoxInformation)
 
     def _format_jar_label(self) -> str:
         return f"Jar sélectionné : {self._jar_path or 'Aucun'}"
 
+    def _update_status(self, message: str, icon: QStyle.StandardPixmap = QStyle.SP_MessageBoxInformation) -> None:
+        self._status_label.setText(message)
+        self._status_icon.setPixmap(self.style().standardIcon(icon).pixmap(20, 20))
+
     def _update_mode_button(self) -> None:
         self._mode_button.setChecked(self._auto_mode)
-        self._mode_button.setText("Mode Auto" if self._auto_mode else "Mode Manuel")
+        if self._auto_mode:
+            self._mode_button.setIcon(self.style().standardIcon(QStyle.SP_BrowserReload))
+            self._mode_button.setText("Mode Auto")
+        else:
+            self._mode_button.setIcon(self.style().standardIcon(QStyle.SP_CommandLink))
+            self._mode_button.setText("Mode Manuel")
 
     def _choose_jar(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Choisir le jar", self._jar_path or str(Path.home()), "Java Archive (*.jar)")
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choisir le jar",
+            self._jar_path or str(Path.home()),
+            "Java Archive (*.jar)",
+        )
         if path:
             self._jar_path = path
             self._jar_label.setText(self._format_jar_label())
             self._settings_manager.save_jar_path(path)
+            self._update_status("Jar mis à jour", QStyle.SP_DialogApplyButton)
 
     def _edit_arguments(self) -> None:
         dialog = ArgsEditorDialog(self._command_args.jvm_properties, self._command_args.app_arguments, self)
@@ -152,7 +265,12 @@ class MainWindow(QMainWindow):
             self._settings_manager.save_app_arguments(app_args)
 
     def _load_yaml(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Charger configuration YAML", str(Path.home()), "YAML (*.yaml *.yml)")
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Charger configuration YAML",
+            str(Path.home()),
+            "YAML (*.yaml *.yml)",
+        )
         if path:
             try:
                 lots = load_lots_from_yaml(path)
@@ -161,18 +279,26 @@ class MainWindow(QMainWindow):
                 return
             self._lots = lots
             self._refresh_lots_table()
+            self._update_status("Configuration chargée", QStyle.SP_DialogApplyButton)
 
     def _save_yaml(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "Enregistrer configuration", str(Path.home()), "YAML (*.yaml *.yml)")
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Enregistrer configuration",
+            str(Path.home()),
+            "YAML (*.yaml *.yml)",
+        )
         if path:
             save_lots_to_yaml(path, self._lots)
             QMessageBox.information(self, "Enregistré", "Configuration sauvegardée")
+            self._update_status("Configuration enregistrée", QStyle.SP_DialogSaveButton)
 
     def _add_lot(self) -> None:
         dialog = LotEditorDialog(parent=self)
         if dialog.exec() == QDialog.Accepted:
             self._lots.append(dialog.get_lot())
             self._refresh_lots_table()
+            self._update_status("Lot ajouté", QStyle.SP_FileDialogNewFolder)
 
     def _edit_lot(self) -> None:
         row = self._lots_table.currentRow()
@@ -182,12 +308,14 @@ class MainWindow(QMainWindow):
         if dialog.exec() == QDialog.Accepted:
             self._lots[row] = dialog.get_lot()
             self._refresh_lots_table()
+            self._update_status("Lot mis à jour", QStyle.SP_FileDialogContentsView)
 
     def _remove_lot(self) -> None:
         row = self._lots_table.currentRow()
         if row >= 0 and row < len(self._lots):
             self._lots.pop(row)
             self._refresh_lots_table()
+            self._update_status("Lot supprimé", QStyle.SP_DialogDiscardButton)
 
     def _move_lot(self, offset: int) -> None:
         row = self._lots_table.currentRow()
@@ -198,8 +326,10 @@ class MainWindow(QMainWindow):
             self._lots[row], self._lots[new_row] = self._lots[new_row], self._lots[row]
             self._refresh_lots_table()
             self._lots_table.selectRow(new_row)
+            self._update_status("Ordre mis à jour", QStyle.SP_ArrowUp if offset < 0 else QStyle.SP_ArrowDown)
 
     def _refresh_lots_table(self) -> None:
+        self._lots_table.setSortingEnabled(False)
         self._lots_table.setRowCount(len(self._lots))
         for row, lot in enumerate(self._lots):
             self._lots_table.setItem(row, 0, QTableWidgetItem(lot.name))
@@ -215,11 +345,17 @@ class MainWindow(QMainWindow):
             self._lots_table.setItem(row, 3, files_item)
         self._lots_table.resizeColumnsToContents()
         self._lots_table.resizeRowsToContents()
+        self._lots_table.setSortingEnabled(True)
+        self._lots_hint_label.setVisible(len(self._lots) == 0)
 
     def _toggle_mode(self) -> None:
         self._auto_mode = not self._auto_mode
         self._settings_manager.save_auto_mode(self._auto_mode)
         self._update_mode_button()
+        self._update_status(
+            "Mode mis à jour",
+            QStyle.SP_BrowserReload if self._auto_mode else QStyle.SP_CommandLink,
+        )
 
     def _start_execution(self) -> None:
         if not self._jar_path:
@@ -237,21 +373,22 @@ class MainWindow(QMainWindow):
         self._run_tabs.clear_tasks()
         self._start_button.setEnabled(False)
         self._stop_button.setEnabled(True)
-        self._status_label.setText("Initialisation...")
+        self._update_status("Initialisation...", QStyle.SP_BrowserReload)
         self._orchestrator.start(settings)
 
     def _stop_execution(self) -> None:
         self._orchestrator.stop_all()
+        self._update_status("Arrêt demandé", QStyle.SP_MediaStop)
 
     def _stop_single_task(self, task) -> None:
         self._orchestrator.stop_task(task)
 
     def _on_lot_started(self, lot: LotConfig) -> None:
-        self._status_label.setText(f"Lot en cours : {lot.name}")
+        self._update_status(f"Lot en cours : {lot.name}", QStyle.SP_MediaPlay)
         self._run_tabs.clear_tasks()
 
     def _on_lot_finished(self, lot: LotConfig) -> None:
-        self._status_label.setText(f"Lot terminé : {lot.name}")
+        self._update_status(f"Lot terminé : {lot.name}", QStyle.SP_DialogApplyButton)
 
     def _on_lot_skipped(self, lot: LotConfig, reason: str) -> None:
         QMessageBox.information(self, "Lot ignoré", f"{lot.name} : {reason}")
@@ -271,7 +408,7 @@ class MainWindow(QMainWindow):
     def _on_all_finished(self) -> None:
         self._start_button.setEnabled(True)
         self._stop_button.setEnabled(False)
-        self._status_label.setText("Prêt")
+        self._update_status("Prêt", QStyle.SP_MessageBoxInformation)
 
     def _on_request_confirmation(self, lot: LotConfig) -> None:
         reply = QMessageBox.question(self, "Continuer", f"Passer au lot suivant après {lot.name} ?")
@@ -284,7 +421,7 @@ class MainWindow(QMainWindow):
         QMessageBox.critical(self, "Erreur", message)
         self._start_button.setEnabled(True)
         self._stop_button.setEnabled(False)
-        self._status_label.setText("Prêt")
+        self._update_status("Prêt", QStyle.SP_MessageBoxWarning)
 
 
 def create_app() -> QApplication:
