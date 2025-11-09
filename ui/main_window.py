@@ -20,8 +20,8 @@ from PySide6.QtWidgets import (
 
 from core.models import AppSettings, CommandArguments, ExecutionStatus, LotConfig
 from core.orchestrator import Orchestrator
-from io.settings import SettingsManager
-from io.yaml_io import load_lots_from_yaml, save_lots_to_yaml
+from app_io.settings import SettingsManager
+from app_io.yaml_io import load_lots_from_yaml, save_lots_to_yaml
 from ui.args_editor import ArgsEditorDialog
 from ui.lots_editor import LotEditorDialog
 from ui.run_tabs import RunTabsWidget
