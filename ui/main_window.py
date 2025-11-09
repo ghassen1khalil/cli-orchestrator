@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -204,11 +205,16 @@ class MainWindow(QMainWindow):
             self._lots_table.setItem(row, 0, QTableWidgetItem(lot.name))
             self._lots_table.setItem(row, 1, QTableWidgetItem(lot.databases_path))
             self._lots_table.setItem(row, 2, QTableWidgetItem(lot.pattern))
-            files_text = ", ".join(Path(f).name for f in lot.files[:3])
-            if len(lot.files) > 3:
-                files_text += f" (+{len(lot.files) - 3})"
-            self._lots_table.setItem(row, 3, QTableWidgetItem(files_text))
+            resolved_files = lot.iter_databases()
+            if resolved_files:
+                files_text = "\n".join(str(path) for path in resolved_files)
+            else:
+                files_text = "Aucun fichier trouvé"
+            files_item = QTableWidgetItem(files_text)
+            files_item.setFlags(files_item.flags() & ~Qt.ItemIsEditable)
+            self._lots_table.setItem(row, 3, files_item)
         self._lots_table.resizeColumnsToContents()
+        self._lots_table.resizeRowsToContents()
 
     def _toggle_mode(self) -> None:
         self._auto_mode = not self._auto_mode
