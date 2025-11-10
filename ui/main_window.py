@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QFileSystemWatcher
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -28,6 +28,7 @@ from core.orchestrator import Orchestrator
 from app_io.settings import SettingsManager
 from app_io.yaml_io import load_lots_from_yaml, save_lots_to_yaml
 from ui.args_editor import ArgsEditorDialog
+from ui.env_editor import EnvEditorDialog
 from ui.lots_editor import LotEditorDialog
 from ui.run_tabs import RunTabsWidget
 
@@ -58,9 +59,17 @@ class MainWindow(QMainWindow):
         self._lots: List[LotConfig] = []
         self._auto_mode = self._settings_manager.load_auto_mode()
 
+        self._env_watcher = QFileSystemWatcher(self)
+        self._env_watcher.fileChanged.connect(self._on_env_fs_event)
+        self._env_watcher.directoryChanged.connect(self._on_env_fs_event)
+        self._env_last_known_exists = False
+        self._env_prompted_for_current_env = False
+
         self._build_ui()
+        self._configure_env_monitoring()
         self._update_mode_button()
         self._refresh_lots_table()
+        self._sync_env_state(offer_if_available=True)
 
     def _build_ui(self) -> None:
         central = QWidget()
@@ -93,6 +102,12 @@ class MainWindow(QMainWindow):
         choose_jar_btn.setToolTip("Sélectionner le fichier jar à exécuter")
         choose_jar_btn.clicked.connect(self._choose_jar)
         buttons_layout.addWidget(choose_jar_btn)
+
+        self._env_button = QPushButton("Gérer .env")
+        self._env_button.setIcon(self.style().standardIcon(QStyle.SP_FileDialogContentsView))
+        self._env_button.setToolTip("Consulter ou modifier le fichier .env associé")
+        self._env_button.clicked.connect(self._open_env_file)
+        buttons_layout.addWidget(self._env_button)
 
         args_button = QPushButton("Arguments JVM & App")
         args_button.setIcon(self.style().standardIcon(QStyle.SP_FileDialogDetailedView))
@@ -253,7 +268,142 @@ class MainWindow(QMainWindow):
             self._jar_path = path
             self._jar_label.setText(self._format_jar_label())
             self._settings_manager.save_jar_path(path)
+            self._env_prompted_for_current_env = False
+            self._configure_env_monitoring()
+            self._sync_env_state(warn_if_missing=True, offer_if_available=True)
             self._update_status("Jar mis à jour", QStyle.SP_DialogApplyButton)
+
+    def _configure_env_monitoring(self) -> None:
+        for existing in list(self._env_watcher.files()):
+            self._env_watcher.removePath(existing)
+        for existing in list(self._env_watcher.directories()):
+            self._env_watcher.removePath(existing)
+        env_path = self._current_env_path()
+        if not env_path:
+            self._env_last_known_exists = False
+            return
+        if env_path.parent.exists():
+            self._env_watcher.addPath(str(env_path.parent))
+        if env_path.exists():
+            self._env_watcher.addPath(str(env_path))
+            self._env_last_known_exists = True
+        else:
+            self._env_last_known_exists = False
+
+    def _sync_env_state(self, warn_if_missing: bool = False, offer_if_available: bool = False) -> None:
+        env_path = self._current_env_path()
+        has_jar = env_path is not None
+        env_exists = env_path.exists() if env_path else False
+        previous_exists = self._env_last_known_exists
+        self._env_button.setEnabled(has_jar)
+        if env_path and env_path.parent.exists():
+            self._ensure_env_directory_watched(env_path.parent)
+        if env_exists:
+            self._ensure_env_file_watched(env_path)
+            if offer_if_available and (not self._env_prompted_for_current_env or not previous_exists):
+                self._prompt_open_env(env_path)
+        else:
+            if warn_if_missing:
+                QMessageBox.warning(
+                    self,
+                    "Fichier .env manquant",
+                    "Aucun fichier .env n'a été trouvé dans le même dossier que le jar sélectionné.",
+                )
+            self._env_prompted_for_current_env = False
+        self._env_last_known_exists = env_exists
+
+    def _ensure_env_directory_watched(self, directory: Path) -> None:
+        dir_path = str(directory)
+        if dir_path not in self._env_watcher.directories():
+            self._env_watcher.addPath(dir_path)
+
+    def _ensure_env_file_watched(self, env_path: Path) -> None:
+        path_str = str(env_path)
+        if path_str not in self._env_watcher.files() and env_path.exists():
+            self._env_watcher.addPath(path_str)
+
+    def _current_env_path(self) -> Path | None:
+        if not self._jar_path:
+            return None
+        try:
+            return Path(self._jar_path).parent / ".env"
+        except Exception:
+            return None
+
+    def _prompt_open_env(self, env_path: Path) -> None:
+        self._env_prompted_for_current_env = True
+        reply = QMessageBox.question(
+            self,
+            "Fichier .env détecté",
+            "Un fichier .env a été détecté. Souhaitez-vous le consulter ou l'éditer ?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+        if reply == QMessageBox.Yes:
+            self._open_env_file()
+
+    def _open_env_file(self) -> None:
+        env_path = self._current_env_path()
+        if not env_path:
+            QMessageBox.warning(self, "Jar manquant", "Veuillez sélectionner un fichier jar avant d'éditer le .env.")
+            return
+        entries: List[Tuple[str, str]]
+        if env_path.exists():
+            try:
+                entries = self._read_env_file(env_path)
+            except Exception as exc:  # pragma: no cover
+                QMessageBox.critical(self, "Erreur", f"Impossible de lire le fichier .env : {exc}")
+                return
+        else:
+            create = QMessageBox.question(
+                self,
+                "Créer .env",
+                "Le fichier .env est introuvable. Souhaitez-vous le créer maintenant ?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes,
+            )
+            if create != QMessageBox.Yes:
+                return
+            entries = []
+        dialog = EnvEditorDialog(entries, self)
+        if dialog.exec() == QDialog.Accepted:
+            new_entries = dialog.get_entries()
+            try:
+                self._write_env_file(env_path, new_entries)
+            except Exception as exc:  # pragma: no cover
+                QMessageBox.critical(self, "Erreur", f"Impossible d'enregistrer le fichier .env : {exc}")
+                return
+            self._update_status(".env mis à jour", QStyle.SP_DialogApplyButton)
+            self._ensure_env_file_watched(env_path)
+            self._env_last_known_exists = True
+            self._env_prompted_for_current_env = True
+
+    def _read_env_file(self, env_path: Path) -> List[Tuple[str, str]]:
+        entries: List[Tuple[str, str]] = []
+        for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                key, value = line.split("=", 1)
+            else:
+                key, value = line, ""
+            entries.append((key.strip(), value.strip()))
+        return entries
+
+    def _write_env_file(self, env_path: Path, entries: List[Tuple[str, str]]) -> None:
+        lines = [f"{key}={value}" for key, value in entries]
+        text = "\n".join(lines)
+        if lines:
+            text += "\n"
+        env_path.parent.mkdir(parents=True, exist_ok=True)
+        env_path.write_text(text, encoding="utf-8")
+
+    def _on_env_fs_event(self, _path: str) -> None:
+        previous_exists = self._env_last_known_exists
+        self._sync_env_state(offer_if_available=not previous_exists)
+        if not self._env_last_known_exists:
+            self._env_prompted_for_current_env = False
 
     def _edit_arguments(self) -> None:
         dialog = ArgsEditorDialog(self._command_args.jvm_properties, self._command_args.app_arguments, self)
