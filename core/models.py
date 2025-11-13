@@ -51,20 +51,33 @@ class LotConfig:
 
 @dataclass
 class CommandArguments:
+    PROFILE_KEY = "spring.profiles.active"
+    PROFILE_VALUE = "fsada"
+    DATASOURCE_KEY = "spring.datasource.url"
+    APP_ARGUMENT = "--fsada"
+
     jvm_properties: List[Tuple[str, str]] = field(default_factory=list)
     app_arguments: List[str] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        # Toujours injecter l'argument applicatif attendu.
+        self.app_arguments = [self.APP_ARGUMENT]
+
     def build_jvm_args(self, db_path: Path) -> List[str]:
-        args = []
-        datasource_key = "spring.datasource.url"
+        args = [f"-D{self.PROFILE_KEY}={self.PROFILE_VALUE}"]
+        datasource_key = self.DATASOURCE_KEY
+        datasource_set = False
         for key, value in self.jvm_properties:
-            if key.strip():
-                if value is None:
-                    value = ""
-                if key.strip() == datasource_key:
-                    value = f"jdbc:sqlite:{db_path}"
-                args.append(f"-D{key.strip()}={value}")
-        if not any(k == datasource_key for k, _ in self.jvm_properties):
+            key = key.strip()
+            if not key or key == self.PROFILE_KEY:
+                continue
+            if value is None:
+                value = ""
+            if key == datasource_key:
+                value = f"jdbc:sqlite:{db_path}"
+                datasource_set = True
+            args.append(f"-D{key}={value}")
+        if not datasource_set:
             args.append(f"-D{datasource_key}=jdbc:sqlite:{db_path}")
         return args
 
@@ -77,8 +90,7 @@ class CommandArguments:
     @classmethod
     def from_dict(cls, data: dict) -> "CommandArguments":
         jvm_props = [(item.get("key", ""), item.get("value", "")) for item in data.get("jvm_properties", [])]
-        app_args = list(data.get("app_arguments", []))
-        return cls(jvm_properties=jvm_props, app_arguments=app_args)
+        return cls(jvm_properties=jvm_props)
 
 
 @dataclass
