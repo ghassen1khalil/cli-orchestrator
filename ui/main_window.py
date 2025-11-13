@@ -24,7 +24,6 @@ from core.models import AppSettings, CommandArguments, ExecutionStatus, LotConfi
 from core.orchestrator import Orchestrator
 from app_io.settings import SettingsManager
 from app_io.yaml_io import load_lots_from_yaml, save_lots_to_yaml
-from ui.args_editor import ArgsEditorDialog
 from ui.dashboard import DashboardWidget
 from ui.env_editor import EnvEditorDialog
 from ui.lots_editor import LotEditorDialog
@@ -51,9 +50,7 @@ class MainWindow(QMainWindow):
         self._orchestrator.startup_error.connect(self._on_startup_error)
 
         self._jar_path = self._settings_manager.load_jar_path()
-        jvm_props = self._settings_manager.load_jvm_properties()
-        app_args = self._settings_manager.load_app_arguments()
-        self._command_args = CommandArguments(jvm_props, app_args)
+        self._command_args = CommandArguments()
         self._lots: List[LotConfig] = []
         self._auto_mode = self._settings_manager.load_auto_mode()
 
@@ -106,12 +103,6 @@ class MainWindow(QMainWindow):
         self._env_button.setToolTip("Consulter ou modifier le fichier .env associé")
         self._env_button.clicked.connect(self._open_env_file)
         buttons_layout.addWidget(self._env_button)
-
-        args_button = QPushButton("Arguments JVM & App")
-        args_button.setIcon(self.style().standardIcon(QStyle.SP_FileDialogDetailedView))
-        args_button.setToolTip("Modifier les paramètres JVM et les arguments de l'application")
-        args_button.clicked.connect(self._edit_arguments)
-        buttons_layout.addWidget(args_button)
 
         load_yaml_btn = QPushButton("Charger YAML")
         load_yaml_btn.setIcon(self.style().standardIcon(QStyle.SP_DialogOpenButton))
@@ -388,15 +379,6 @@ class MainWindow(QMainWindow):
         self._sync_env_state(offer_if_available=not previous_exists)
         if not self._env_last_known_exists:
             self._env_prompted_for_current_env = False
-
-    def _edit_arguments(self) -> None:
-        dialog = ArgsEditorDialog(self._command_args.jvm_properties, self._command_args.app_arguments, self)
-        if dialog.exec() == QDialog.Accepted:
-            jvm_props, app_args = dialog.get_values()
-            self._command_args.jvm_properties = jvm_props
-            self._command_args.app_arguments = app_args
-            self._settings_manager.save_jvm_properties(jvm_props)
-            self._settings_manager.save_app_arguments(app_args)
 
     def _load_yaml(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
