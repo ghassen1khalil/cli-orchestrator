@@ -46,6 +46,15 @@ class LotEditorDialog(QDialog):
         form = QFormLayout()
         form.addRow("Nom", self._name_edit)
 
+        method1_group = QGroupBox("Méthode 1 : Extraire automatiquement depuis un dossier")
+        method1_layout = QFormLayout(method1_group)
+        method1_info = QLabel(
+            "Choisissez un dossier contenant vos bases SQLite et laissez l'application "
+            "récupérer automatiquement tous les fichiers correspondant au pattern (par défaut *.db)."
+        )
+        method1_info.setWordWrap(True)
+        method1_layout.addRow(method1_info)
+
         path_layout = QHBoxLayout()
         path_layout.addWidget(self._path_edit)
         browse_btn = QPushButton("Choisir")
@@ -53,13 +62,21 @@ class LotEditorDialog(QDialog):
         browse_btn.setToolTip("Sélectionner le dossier contenant les bases")
         browse_btn.clicked.connect(self._choose_directory)
         path_layout.addWidget(browse_btn)
-        form.addRow("Dossier", path_layout)
+        method1_layout.addRow("Dossier", path_layout)
 
-        form.addRow("Pattern", self._pattern_edit)
+        pattern_label = QLabel("Pattern")
+        pattern_label.setToolTip("Les fichiers trouvés dans le dossier seront filtrés avec ce pattern.")
+        method1_layout.addRow(pattern_label, self._pattern_edit)
 
-        files_group = QGroupBox("Fichiers sélectionnés (optionnel)")
+        files_group = QGroupBox("Méthode 2 : Ajouter manuellement des fichiers")
         files_layout = QVBoxLayout(files_group)
-        files_layout.addWidget(QLabel("Lorsque la liste est vide, le pattern est utilisé."))
+        files_info = QLabel(
+            "Utilisez cette méthode si vous souhaitez sélectionner précisément les fichiers .db à inclure dans le lot."
+            " Vous pouvez ajouter, retirer ou vider la liste selon vos besoins."
+        )
+        files_info.setWordWrap(True)
+        files_layout.addWidget(files_info)
+        files_layout.addWidget(QLabel("Lorsque la liste est vide, le pattern de la méthode 1 sera utilisé."))
         files_layout.addWidget(self._files_list)
         btn_bar = QHBoxLayout()
         add_files_btn = QPushButton("Ajouter fichiers")
@@ -81,6 +98,7 @@ class LotEditorDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.addLayout(form)
+        layout.addWidget(method1_group)
         layout.addWidget(files_group)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
