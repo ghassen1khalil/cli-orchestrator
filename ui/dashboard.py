@@ -23,6 +23,7 @@ from core.models import DatabaseTask, ExecutionStatus, LotConfig
 class LotProgress:
     lot: LotConfig
     total_databases: int
+    detected_files: List[str] = field(default_factory=list)
     processed: int = 0
     running: int = 0
     succeeded: int = 0
@@ -100,10 +101,13 @@ class DashboardWidget(QFrame):
         parent_layout.addWidget(summary_frame)
 
     def _build_table(self, parent_layout: QVBoxLayout) -> None:
-        self._table = QTableWidget(0, 6)
+        self._table = QTableWidget(0, 9)
         self._table.setHorizontalHeaderLabels(
             [
-                "Lot",
+                "Nom",
+                "Dossier",
+                "Pattern",
+                "Fichiers détectés",
                 "Bases totales",
                 "Traitées",
                 "En cours",
@@ -113,22 +117,39 @@ class DashboardWidget(QFrame):
         )
         self._table.verticalHeader().setVisible(False)
         self._table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self._table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self._table.setAlternatingRowColors(True)
+        self._table.setWordWrap(True)
+        self._table.setToolTip(
+            "Synthèse des lots chargés : configuration et progression en temps réel."
+        )
         header = self._table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.Stretch)
         header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(5, QHeaderView.Stretch)
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(7, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(8, QHeaderView.Stretch)
         parent_layout.addWidget(self._table)
+
+    def table_widget(self) -> QTableWidget:
+        return self._table
 
     # --- Données ---
     def set_lots(self, lots: List[LotConfig]) -> None:
         self._lot_rows = [lot.name for lot in lots]
-        self._progress = {
-            lot.name: LotProgress(lot=lot, total_databases=len(lot.iter_databases()))
-            for lot in lots
-        }
+        self._progress = {}
+        for lot in lots:
+            detected_files = [str(path) for path in lot.iter_databases()]
+            self._progress[lot.name] = LotProgress(
+                lot=lot,
+                total_databases=len(detected_files),
+                detected_files=detected_files,
+            )
         self.prepare_for_run()
 
     def prepare_for_run(self) -> None:
@@ -192,19 +213,34 @@ class DashboardWidget(QFrame):
         self._update_summary()
 
     def _update_table(self) -> None:
+        self._table.setSortingEnabled(False)
         self._table.setRowCount(len(self._lot_rows))
         for row, lot_name in enumerate(self._lot_rows):
             progress = self._progress.get(lot_name)
             if not progress:
                 continue
-            self._table.setItem(row, 0, QTableWidgetItem(lot_name))
-            self._table.setItem(row, 1, QTableWidgetItem(str(progress.total_databases)))
+            lot = progress.lot
+            self._table.setItem(row, 0, QTableWidgetItem(lot.name))
+            self._table.setItem(row, 1, QTableWidgetItem(lot.databases_path))
+            self._table.setItem(row, 2, QTableWidgetItem(lot.pattern))
+
+            if progress.detected_files:
+                files_text = "\n".join(progress.detected_files)
+            else:
+                files_text = "Aucun fichier trouvé"
+            files_item = QTableWidgetItem(files_text)
+            files_item.setFlags(files_item.flags() & ~Qt.ItemIsEditable)
+            self._table.setItem(row, 3, files_item)
+
+            self._table.setItem(row, 4, QTableWidgetItem(str(progress.total_databases)))
             progress_text = f"{progress.processed}/{progress.total_databases}"
-            self._table.setItem(row, 2, QTableWidgetItem(progress_text))
-            self._table.setItem(row, 3, QTableWidgetItem(str(progress.running)))
-            self._table.setItem(row, 4, QTableWidgetItem(str(progress.failed)))
-            self._table.setItem(row, 5, QTableWidgetItem(progress.status))
+            self._table.setItem(row, 5, QTableWidgetItem(progress_text))
+            self._table.setItem(row, 6, QTableWidgetItem(str(progress.running)))
+            self._table.setItem(row, 7, QTableWidgetItem(str(progress.failed)))
+            self._table.setItem(row, 8, QTableWidgetItem(progress.status))
+        self._table.resizeColumnsToContents()
         self._table.resizeRowsToContents()
+        self._table.setSortingEnabled(True)
 
     def _update_summary(self) -> None:
         lots_total = len(self._progress)

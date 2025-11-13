@@ -16,12 +16,9 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSplitter,
     QStyle,
-    QTableWidget,
-    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
-from PySide6.QtWidgets import QHeaderView
 
 from core.models import AppSettings, CommandArguments, ExecutionStatus, LotConfig
 from core.orchestrator import Orchestrator
@@ -156,20 +153,7 @@ class MainWindow(QMainWindow):
         root_layout.addWidget(header_frame)
 
         self._dashboard = DashboardWidget()
-        root_layout.addWidget(self._dashboard)
-
-        self._lots_table = QTableWidget(0, 4)
-        self._lots_table.setHorizontalHeaderLabels(["Nom", "Dossier", "Pattern", "Fichiers détectés"])
-        self._lots_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        self._lots_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self._lots_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        self._lots_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
-        self._lots_table.verticalHeader().setVisible(False)
-        self._lots_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self._lots_table.setSelectionMode(QTableWidget.SingleSelection)
-        self._lots_table.setAlternatingRowColors(True)
-        self._lots_table.setWordWrap(True)
-        self._lots_table.setToolTip("Liste des lots à exécuter. Sélectionnez-en un pour le modifier ou réorganiser l'ordre.")
+        self._lots_table = self._dashboard.table_widget()
 
         lot_buttons_layout = QHBoxLayout()
         lot_buttons_layout.setSpacing(6)
@@ -203,20 +187,16 @@ class MainWindow(QMainWindow):
             lot_buttons_layout.addWidget(btn)
         lot_buttons_layout.addStretch()
 
-        lots_container = QFrame()
-        lots_container.setFrameShape(QFrame.StyledPanel)
-        lots_layout = QVBoxLayout(lots_container)
-        lots_layout.setContentsMargins(12, 12, 12, 12)
-        lots_layout.setSpacing(8)
-
-        self._lots_hint_label = QLabel("Ajoutez des lots pour définir vos traitements.")
-        self._lots_hint_label.setStyleSheet("color: #555; font-style: italic;")
-        lots_layout.addWidget(self._lots_hint_label)
-        lots_layout.addWidget(self._lots_table)
-        lots_layout.addLayout(lot_buttons_layout)
+        overview_container = QFrame()
+        overview_container.setFrameShape(QFrame.StyledPanel)
+        overview_layout = QVBoxLayout(overview_container)
+        overview_layout.setContentsMargins(12, 12, 12, 12)
+        overview_layout.setSpacing(8)
+        overview_layout.addWidget(self._dashboard)
+        overview_layout.addLayout(lot_buttons_layout)
 
         splitter = QSplitter(Qt.Vertical)
-        splitter.addWidget(lots_container)
+        splitter.addWidget(overview_container)
 
         self._run_tabs = RunTabsWidget()
         self._run_tabs.stop_requested.connect(self._stop_single_task)
@@ -483,25 +463,10 @@ class MainWindow(QMainWindow):
             self._update_status("Ordre mis à jour", QStyle.SP_ArrowUp if offset < 0 else QStyle.SP_ArrowDown)
 
     def _refresh_lots_table(self) -> None:
-        self._lots_table.setSortingEnabled(False)
-        self._lots_table.setRowCount(len(self._lots))
-        for row, lot in enumerate(self._lots):
-            self._lots_table.setItem(row, 0, QTableWidgetItem(lot.name))
-            self._lots_table.setItem(row, 1, QTableWidgetItem(lot.databases_path))
-            self._lots_table.setItem(row, 2, QTableWidgetItem(lot.pattern))
-            resolved_files = lot.iter_databases()
-            if resolved_files:
-                files_text = "\n".join(str(path) for path in resolved_files)
-            else:
-                files_text = "Aucun fichier trouvé"
-            files_item = QTableWidgetItem(files_text)
-            files_item.setFlags(files_item.flags() & ~Qt.ItemIsEditable)
-            self._lots_table.setItem(row, 3, files_item)
-        self._lots_table.resizeColumnsToContents()
-        self._lots_table.resizeRowsToContents()
-        self._lots_table.setSortingEnabled(True)
-        self._lots_hint_label.setVisible(len(self._lots) == 0)
+        previous_row = self._lots_table.currentRow()
         self._dashboard.set_lots(self._lots)
+        if 0 <= previous_row < len(self._lots):
+            self._lots_table.selectRow(previous_row)
 
     def _toggle_mode(self) -> None:
         self._auto_mode = not self._auto_mode
