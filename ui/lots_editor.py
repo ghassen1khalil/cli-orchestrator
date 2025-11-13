@@ -141,7 +141,13 @@ class LotEditorDialog(QDialog):
         if not self._name_edit.text().strip():
             self._name_edit.setFocus()
             return
-        if not self._path_edit.text().strip():
+        has_path = bool(self._path_edit.text().strip())
+        has_files = self._files_list.count() > 0
+        if not has_path and has_files:
+            first_file = Path(self._files_list.item(0).text()).expanduser()
+            self._path_edit.setText(str(first_file.parent))
+            has_path = True
+        if not has_path:
             self._path_edit.setFocus()
             return
         self.accept()
