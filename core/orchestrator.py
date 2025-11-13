@@ -100,8 +100,13 @@ class Orchestrator(QObject):
             if self._settings and self._settings.auto_mode:
                 self._start_next_lot()
             else:
-                self._awaiting_confirmation = True
-                self.request_lot_confirmation.emit(lot)
+                has_more_lots = self._current_lot_index + 1 < len(self._lots)
+                if has_more_lots:
+                    self._awaiting_confirmation = True
+                    self.request_lot_confirmation.emit(lot)
+                else:
+                    # Aucun lot supplémentaire : terminer immédiatement sans demander.
+                    self._start_next_lot()
 
     def continue_to_next_lot(self) -> None:
         if not self._running or not self._awaiting_confirmation:
