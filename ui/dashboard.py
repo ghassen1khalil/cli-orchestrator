@@ -3,12 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFrame,
     QGridLayout,
     QHeaderView,
     QLabel,
+    QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -57,10 +59,11 @@ class DashboardWidget(QFrame):
 
     def _build_summary(self, parent_layout: QVBoxLayout) -> None:
         summary_frame = QFrame()
+        summary_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         summary_layout = QGridLayout(summary_frame)
         summary_layout.setContentsMargins(0, 0, 0, 0)
-        summary_layout.setHorizontalSpacing(20)
-        summary_layout.setVerticalSpacing(6)
+        summary_layout.setHorizontalSpacing(16)
+        summary_layout.setVerticalSpacing(0)
 
         metrics = [
             ("Lots chargés", "lots"),
@@ -71,13 +74,28 @@ class DashboardWidget(QFrame):
             ("Erreurs cumulées", "errors"),
         ]
         for index, (label, key) in enumerate(metrics):
+            column = index
+            container = QFrame()
+            container_layout = QVBoxLayout(container)
+            container_layout.setContentsMargins(0, 0, 0, 0)
+            container_layout.setSpacing(2)
             title = QLabel(label)
-            title.setStyleSheet("color: #666; font-size: 11px;")
+            title.setAlignment(Qt.AlignCenter)
+            title.setStyleSheet("color: #666; font-size: 10px; font-weight: 500;")
             value = QLabel("0")
-            value.setStyleSheet("font-size: 20px; font-weight: 600;")
-            summary_layout.addWidget(title, index // 3 * 2, index % 3)
-            summary_layout.addWidget(value, index // 3 * 2 + 1, index % 3)
+            value.setAlignment(Qt.AlignCenter)
+            value.setStyleSheet("font-size: 18px; font-weight: 600;")
+            container_layout.addWidget(value)
+            container_layout.addWidget(title)
+            summary_layout.addWidget(container, 0, column)
             self._summary_labels[key] = value
+
+        summary_layout.setColumnStretch(0, 1)
+        summary_layout.setColumnStretch(1, 1)
+        summary_layout.setColumnStretch(2, 1)
+        summary_layout.setColumnStretch(3, 1)
+        summary_layout.setColumnStretch(4, 1)
+        summary_layout.setColumnStretch(5, 1)
 
         parent_layout.addWidget(summary_frame)
 
