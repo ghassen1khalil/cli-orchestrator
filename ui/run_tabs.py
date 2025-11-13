@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict
+from typing import Callable, Dict
 
 from PySide6.QtCore import QElapsedTimer, QTimer, Qt, Signal, QSize
 from PySide6.QtGui import QTextCursor
@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSizePolicy,
     QTabWidget,
     QTextEdit,
     QVBoxLayout,
@@ -117,22 +118,38 @@ class RunTab(QWidget):
         self.timer_label.setText(f"Temps écoulé : {formatted}")
 
 
-class RunTabsWidget(QTabWidget):
-    stop_requested = Signal(DatabaseTask)
-
-    def __init__(self, parent=None):
+class LotLogsTab(QWidget):
+    def __init__(self, lot_name: str, stop_callback: Callable[[DatabaseTask], None], parent=None):
         super().__init__(parent)
+        self.lot_name = lot_name
+        self._stop_callback = stop_callback
         self._tabs: Dict[str, RunTab] = {}
-        self.setDocumentMode(True)
-        self.setMovable(True)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        header = QLabel(f"Logs du lot : {lot_name}")
+        header.setAlignment(Qt.AlignLeft)
+        header.setStyleSheet("font-weight: 600; color: #444;")
+        layout.addWidget(header)
+
+        self._tab_widget = QTabWidget()
+        self._tab_widget.setDocumentMode(True)
+        self._tab_widget.setMovable(True)
+        self._tab_widget.setTabPosition(QTabWidget.North)
+        self._tab_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        layout.addWidget(self._tab_widget)
 
     def start_task(self, task: DatabaseTask, command: str) -> None:
         tab = RunTab(task, command)
         tab.set_status(ExecutionStatus.RUNNING)
-        tab.stop_button.clicked.connect(lambda: self.stop_requested.emit(task))
+        tab.stop_button.clicked.connect(lambda _=False, t=task: self._stop_callback(t))
         self._tabs[task.id()] = tab
-        self.addTab(tab, self._icon_for_status(ExecutionStatus.RUNNING), task.display_name())
-        self.setCurrentWidget(tab)
+        self._tab_widget.addTab(
+            tab,
+            self._icon_for_status(ExecutionStatus.RUNNING),
+            task.display_name(),
+        )
+        self._tab_widget.setCurrentWidget(tab)
 
     def append_output(self, task: DatabaseTask, text: str, is_error: bool) -> None:
         tab = self._tabs.get(task.id())
@@ -143,13 +160,9 @@ class RunTabsWidget(QTabWidget):
         tab = self._tabs.get(task.id())
         if tab:
             tab.set_status(status)
-            index = self.indexOf(tab)
+            index = self._tab_widget.indexOf(tab)
             if index != -1:
-                self.setTabIcon(index, self._icon_for_status(status))
-
-    def clear_tasks(self) -> None:
-        self._tabs.clear()
-        self.clear()
+                self._tab_widget.setTabIcon(index, self._icon_for_status(status))
 
     def _icon_for_status(self, status: ExecutionStatus):
         mapping = {
@@ -161,3 +174,73 @@ class RunTabsWidget(QTabWidget):
         }
         icon_type = mapping.get(status, QStyle.SP_FileDialogInfoView)
         return self.style().standardIcon(icon_type)
+
+
+class RunTabsWidget(QTabWidget):
+    stop_requested = Signal(DatabaseTask)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._lot_tabs: Dict[str, LotLogsTab] = {}
+        self.setDocumentMode(True)
+        self.setMovable(True)
+
+    def reset(self) -> None:
+        self._lot_tabs.clear()
+        self.clear()
+
+    def mark_lot_started(self, lot_name: str) -> None:
+        tab = self._ensure_lot_tab(lot_name)
+        index = self.indexOf(tab)
+        if index != -1:
+            self.setCurrentIndex(index)
+            self.setTabIcon(index, self.style().standardIcon(QStyle.SP_MediaPlay))
+            self.setTabToolTip(index, f"Lot {lot_name} en cours")
+
+    def mark_lot_finished(self, lot_name: str) -> None:
+        tab = self._lot_tabs.get(lot_name)
+        if not tab:
+            return
+        index = self.indexOf(tab)
+        if index != -1:
+            self.setTabIcon(index, self.style().standardIcon(QStyle.SP_DialogApplyButton))
+            self.setTabToolTip(index, f"Lot {lot_name} terminé")
+
+    def mark_lot_skipped(self, lot_name: str, reason: str | None = None) -> None:
+        tab = self._ensure_lot_tab(lot_name)
+        index = self.indexOf(tab)
+        if index != -1:
+            icon = self.style().standardIcon(QStyle.SP_MessageBoxWarning)
+            self.setTabIcon(index, icon)
+            tooltip = f"Lot {lot_name} ignoré"
+            if reason:
+                tooltip += f" : {reason}"
+            self.setTabToolTip(index, tooltip)
+
+    def start_task(self, task: DatabaseTask, command: str) -> None:
+        tab = self._ensure_lot_tab(task.lot.name)
+        tab.start_task(task, command)
+        index = self.indexOf(tab)
+        if index != -1:
+            self.setCurrentIndex(index)
+
+    def append_output(self, task: DatabaseTask, text: str, is_error: bool) -> None:
+        tab = self._lot_tabs.get(task.lot.name)
+        if tab:
+            tab.append_output(task, text, is_error)
+
+    def finish_task(self, task: DatabaseTask, status: ExecutionStatus) -> None:
+        tab = self._lot_tabs.get(task.lot.name)
+        if tab:
+            tab.finish_task(task, status)
+
+    def _ensure_lot_tab(self, lot_name: str) -> LotLogsTab:
+        tab = self._lot_tabs.get(lot_name)
+        if tab:
+            return tab
+        tab = LotLogsTab(lot_name, self.stop_requested.emit)
+        self._lot_tabs[lot_name] = tab
+        icon = self.style().standardIcon(QStyle.SP_FileDialogInfoView)
+        self.addTab(tab, icon, lot_name)
+        self.setTabToolTip(self.indexOf(tab), f"Onglets de bases pour le lot {lot_name}")
+        return tab
