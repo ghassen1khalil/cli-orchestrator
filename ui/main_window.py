@@ -490,7 +490,7 @@ class MainWindow(QMainWindow):
             command_args=self._command_args,
             auto_mode=self._auto_mode,
         )
-        self._run_tabs.clear_tasks()
+        self._run_tabs.reset()
         self._dashboard.prepare_for_run()
         self._start_button.setEnabled(False)
         self._stop_button.setEnabled(True)
@@ -506,15 +506,17 @@ class MainWindow(QMainWindow):
 
     def _on_lot_started(self, lot: LotConfig) -> None:
         self._update_status(f"Lot en cours : {lot.name}", QStyle.SP_MediaPlay)
-        self._run_tabs.clear_tasks()
+        self._run_tabs.mark_lot_started(lot.name)
         self._dashboard.mark_lot_started(lot)
 
     def _on_lot_finished(self, lot: LotConfig) -> None:
         self._update_status(f"Lot terminé : {lot.name}", QStyle.SP_DialogApplyButton)
+        self._run_tabs.mark_lot_finished(lot.name)
         self._dashboard.mark_lot_finished(lot)
 
     def _on_lot_skipped(self, lot: LotConfig, reason: str) -> None:
         QMessageBox.information(self, "Lot ignoré", f"{lot.name} : {reason}")
+        self._run_tabs.mark_lot_skipped(lot.name, reason)
         self._dashboard.mark_lot_skipped(lot, reason)
 
     def _on_task_started(self, task, command: str) -> None:

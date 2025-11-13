@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import time
 from typing import Dict, List
 
 from PySide6.QtCore import Qt
@@ -30,6 +31,7 @@ class LotProgress:
     failed: int = 0
     skipped: bool = False
     status: str = field(default="En attente", init=False)
+    total_elapsed_seconds: float = 0.0
 
     def reset(self) -> None:
         self.processed = 0
@@ -38,6 +40,7 @@ class LotProgress:
         self.failed = 0
         self.skipped = False
         self.status = "En attente"
+        self.total_elapsed_seconds = 0.0
 
 
 class DashboardWidget(QFrame):
@@ -48,6 +51,7 @@ class DashboardWidget(QFrame):
         self._lot_rows: List[str] = []
         self._progress: Dict[str, LotProgress] = {}
         self._summary_labels: Dict[str, QLabel] = {}
+        self._task_start_times: Dict[str, float] = {}
 
         self.setFrameShape(QFrame.StyledPanel)
         self.setObjectName("dashboardFrame")
@@ -101,7 +105,7 @@ class DashboardWidget(QFrame):
         parent_layout.addWidget(summary_frame)
 
     def _build_table(self, parent_layout: QVBoxLayout) -> None:
-        self._table = QTableWidget(0, 9)
+        self._table = QTableWidget(0, 10)
         self._table.setHorizontalHeaderLabels(
             [
                 "Nom",
@@ -112,6 +116,7 @@ class DashboardWidget(QFrame):
                 "Traitées",
                 "En cours",
                 "Erreurs",
+                "Temps cumulé",
                 "Statut",
             ]
         )
@@ -133,7 +138,8 @@ class DashboardWidget(QFrame):
         header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(7, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(8, QHeaderView.Stretch)
+        header.setSectionResizeMode(8, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(9, QHeaderView.Stretch)
         parent_layout.addWidget(self._table)
 
     def table_widget(self) -> QTableWidget:
@@ -143,6 +149,7 @@ class DashboardWidget(QFrame):
     def set_lots(self, lots: List[LotConfig]) -> None:
         self._lot_rows = [lot.name for lot in lots]
         self._progress = {}
+        self._task_start_times = {}
         for lot in lots:
             detected_files = [str(path) for path in lot.iter_databases()]
             self._progress[lot.name] = LotProgress(
@@ -155,6 +162,7 @@ class DashboardWidget(QFrame):
     def prepare_for_run(self) -> None:
         for progress in self._progress.values():
             progress.reset()
+        self._task_start_times = {}
         self._refresh_ui()
 
     def mark_lot_started(self, lot: LotConfig) -> None:
@@ -186,6 +194,7 @@ class DashboardWidget(QFrame):
         progress.running += 1
         if progress.status == "En attente":
             progress.status = "En cours"
+        self._task_start_times[task.id()] = time.perf_counter()
         self._refresh_ui()
 
     def mark_task_finished(self, task: DatabaseTask, status: ExecutionStatus) -> None:
@@ -194,6 +203,10 @@ class DashboardWidget(QFrame):
             return
         progress.running = max(0, progress.running - 1)
         progress.processed += 1
+        start_time = self._task_start_times.pop(task.id(), None)
+        if start_time is not None:
+            elapsed = max(0.0, time.perf_counter() - start_time)
+            progress.total_elapsed_seconds += elapsed
         if status == ExecutionStatus.SUCCEEDED:
             progress.succeeded += 1
         elif status in (ExecutionStatus.FAILED, ExecutionStatus.STOPPED):
@@ -237,10 +250,23 @@ class DashboardWidget(QFrame):
             self._table.setItem(row, 5, QTableWidgetItem(progress_text))
             self._table.setItem(row, 6, QTableWidgetItem(str(progress.running)))
             self._table.setItem(row, 7, QTableWidgetItem(str(progress.failed)))
-            self._table.setItem(row, 8, QTableWidgetItem(progress.status))
+            elapsed_text = self._format_elapsed(progress.total_elapsed_seconds)
+            self._table.setItem(row, 8, QTableWidgetItem(elapsed_text))
+            self._table.setItem(row, 9, QTableWidgetItem(progress.status))
         self._table.resizeColumnsToContents()
         self._table.resizeRowsToContents()
         self._table.setSortingEnabled(True)
+
+    def _format_elapsed(self, elapsed_seconds: float) -> str:
+        if elapsed_seconds <= 0:
+            return "-"
+        total_seconds = int(round(elapsed_seconds))
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        if hours:
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        return f"{minutes:02d}:{seconds:02d}"
 
     def _update_summary(self) -> None:
         lots_total = len(self._progress)
