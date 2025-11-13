@@ -28,6 +28,7 @@ from core.orchestrator import Orchestrator
 from app_io.settings import SettingsManager
 from app_io.yaml_io import load_lots_from_yaml, save_lots_to_yaml
 from ui.args_editor import ArgsEditorDialog
+from ui.dashboard import DashboardWidget
 from ui.env_editor import EnvEditorDialog
 from ui.lots_editor import LotEditorDialog
 from ui.run_tabs import RunTabsWidget
@@ -153,6 +154,9 @@ class MainWindow(QMainWindow):
 
         header_layout.addLayout(buttons_layout)
         root_layout.addWidget(header_frame)
+
+        self._dashboard = DashboardWidget()
+        root_layout.addWidget(self._dashboard)
 
         self._lots_table = QTableWidget(0, 4)
         self._lots_table.setHorizontalHeaderLabels(["Nom", "Dossier", "Pattern", "Fichiers détectés"])
@@ -497,6 +501,7 @@ class MainWindow(QMainWindow):
         self._lots_table.resizeRowsToContents()
         self._lots_table.setSortingEnabled(True)
         self._lots_hint_label.setVisible(len(self._lots) == 0)
+        self._dashboard.set_lots(self._lots)
 
     def _toggle_mode(self) -> None:
         self._auto_mode = not self._auto_mode
@@ -521,6 +526,7 @@ class MainWindow(QMainWindow):
             auto_mode=self._auto_mode,
         )
         self._run_tabs.clear_tasks()
+        self._dashboard.prepare_for_run()
         self._start_button.setEnabled(False)
         self._stop_button.setEnabled(True)
         self._update_status("Initialisation...", QStyle.SP_BrowserReload)
@@ -536,21 +542,26 @@ class MainWindow(QMainWindow):
     def _on_lot_started(self, lot: LotConfig) -> None:
         self._update_status(f"Lot en cours : {lot.name}", QStyle.SP_MediaPlay)
         self._run_tabs.clear_tasks()
+        self._dashboard.mark_lot_started(lot)
 
     def _on_lot_finished(self, lot: LotConfig) -> None:
         self._update_status(f"Lot terminé : {lot.name}", QStyle.SP_DialogApplyButton)
+        self._dashboard.mark_lot_finished(lot)
 
     def _on_lot_skipped(self, lot: LotConfig, reason: str) -> None:
         QMessageBox.information(self, "Lot ignoré", f"{lot.name} : {reason}")
+        self._dashboard.mark_lot_skipped(lot, reason)
 
     def _on_task_started(self, task, command: str) -> None:
         self._run_tabs.start_task(task, command)
+        self._dashboard.mark_task_started(task)
 
     def _on_task_output(self, task, text: str, is_error: bool) -> None:
         self._run_tabs.append_output(task, text, is_error)
 
     def _on_task_finished(self, task, status: ExecutionStatus, exit_code: int) -> None:
         self._run_tabs.finish_task(task, status)
+        self._dashboard.mark_task_finished(task, status)
 
     def _on_task_error(self, task, message: str) -> None:
         QMessageBox.critical(self, "Erreur", f"{task.display_name()} : {message}")
@@ -559,6 +570,7 @@ class MainWindow(QMainWindow):
         self._start_button.setEnabled(True)
         self._stop_button.setEnabled(False)
         self._update_status("Prêt", QStyle.SP_MessageBoxInformation)
+        self._dashboard.mark_run_completed()
 
     def _on_request_confirmation(self, lot: LotConfig) -> None:
         reply = QMessageBox.question(self, "Continuer", f"Passer au lot suivant après {lot.name} ?")
