@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 from PySide6.QtCore import Qt, QSize, QFileSystemWatcher
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -65,6 +66,11 @@ class MainWindow(QMainWindow):
         self._update_mode_button()
         self._refresh_lots_table()
         self._sync_env_state(offer_if_available=True)
+
+    def closeEvent(self, event: QCloseEvent) -> None:  # type: ignore[override]
+        """Ensure the jar path is cleared between sessions."""
+        self._settings_manager.clear_jar_path()
+        super().closeEvent(event)
 
     def _build_ui(self) -> None:
         central = QWidget()

@@ -16,6 +16,9 @@ class SettingsManager:
     def save_jar_path(self, path: str) -> None:
         self._settings.setValue("jar_path", path)
 
+    def clear_jar_path(self) -> None:
+        self._settings.remove("jar_path")
+
     def load_auto_mode(self) -> bool:
         return self._settings.value("auto_mode", True, type=bool)
 
