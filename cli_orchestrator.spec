@@ -2,7 +2,22 @@
 """PyInstaller specification for building the Windows executable."""
 from pathlib import Path
 
-project_root = Path(__file__).parent.resolve()
+
+def _resolve_project_root() -> Path:
+    """Return the path used by PyInstaller when executing this spec."""
+
+    # PyInstaller executes the spec file via ``exec`` which does not populate
+    # ``__file__`` in some environments (for example when the command is run
+    # from PowerShell as shown in the user's screenshot).  Falling back to the
+    # current working directory guarantees the project path is resolved even
+    # when ``__file__`` is missing.
+    try:
+        return Path(__file__).parent.resolve()  # type: ignore[name-defined]
+    except NameError:
+        return Path.cwd()
+
+
+project_root = _resolve_project_root()
 
 block_cipher = None
 
