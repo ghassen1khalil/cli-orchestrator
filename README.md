@@ -51,3 +51,30 @@ Si des fichiers sont listés explicitement pour un lot, le pattern est ignoré.
 - La commande exécutée prend la forme `java -Dspring.profiles.active=fsada -Dspring.datasource.url=jdbc:sqlite:<base> -jar <jar> --fsada`.
 - La propriété `spring.datasource.url` est automatiquement renseignée avec le chemin de la base courante.
 - L'application stocke uniquement le chemin du jar et le mode automatique via `QSettings`.
+
+## Packaging Windows (.exe)
+
+Un fichier `cli_orchestrator.spec` est fourni pour générer un exécutable Windows autonome via [PyInstaller](https://pyinstaller.org/).
+
+1. Sur **Windows**, installez Python 3.10 ou supérieur puis créez un environnement virtuel :
+
+   ```powershell
+   py -3.10 -m venv .venv
+   .\.venv\Scripts\activate
+   ```
+
+2. Installez les dépendances de l'application ainsi que PyInstaller :
+
+   ```powershell
+   pip install -r requirements.txt
+   ```
+
+3. Générez l'exécutable en utilisant la spec fournie (désactive la console car l'application est 100% graphique) :
+
+   ```powershell
+   pyinstaller --clean --noconfirm cli_orchestrator.spec
+   ```
+
+4. L'exécutable `dist/cli-orchestrator.exe` peut alors être copié et distribué. PyInstaller embarque automatiquement les dépendances Qt nécessaires.
+
+> ℹ️ PyInstaller produit des exécutables spécifiques au système. L'exécutable Windows doit donc être construit depuis un poste Windows ; les systèmes Linux/macOS devront utiliser PyInstaller localement pour générer leur propre binaire.
